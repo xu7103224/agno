@@ -718,3 +718,233 @@ class OpenAIChat(Model):
             model_response.response_usage = response_delta.usage
 
         return model_response
+
+# add by xuy 20250411
+@dataclass
+class QWQChat(OpenAIChat):
+    """
+    A pre-configured OpenAIChat class for using the QWQ-32B model through DashScope compatible API.
+    
+    This model is pre-configured to use the QWQ-32B model via the Alibaba Cloud DashScope
+    compatible API endpoint.
+    """
+    
+    def __init__(
+        self,
+        id: str = "qwq-32b",
+        name: str = "QWQChat",
+        provider: str = "Alibaba DashScope",
+        **kwargs
+    ):
+        super().__init__(
+            id=id,
+            name=name,
+            provider=provider,
+            **kwargs
+        )
+        # Set up pre-configured settings
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
+        # 修正角色映射
+        self.role_map = {
+            "system": "system",  # 改为标准角色
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+            "model": "assistant",
+        }
+        
+
+import json
+import time
+import uuid
+from typing import Any, Type
+
+from pydantic import ValidationError
+
+@dataclass
+class DeepSeekV3Chat(OpenAIChat):
+    """
+    A pre-configured OpenAIChat class for using the QWQ-32B model through DashScope compatible API.
+    
+    This model is pre-configured to use the QWQ-32B model via the Alibaba Cloud DashScope
+    compatible API endpoint.
+    """
+    
+    def __init__(
+        self,
+        id: str = "deepseek-v3",
+        name: str = "DeepSeekChat",
+        provider: str = "Alibaba DashScope",
+        **kwargs
+    ):
+        super().__init__(
+            id=id,
+            name=name,
+            provider=provider,
+            **kwargs
+        )
+        # Set up pre-configured settings
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
+        # 修正角色映射
+        self.role_map = {
+            "system": "system",  # 改为标准角色
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+            "model": "assistant",
+        }
+
+    # def invoke(self, messages: List[Message]) -> Union[ChatCompletion, ParsedChatCompletion]:
+    #     # 如果需要结构化输出，注入明确的JSON格式指导
+    #     if self.response_format is not None and self.structured_outputs:
+    #         # 备份原请求参数并移除可能的 stream 参数
+    #         kwargs = {k: v for k, v in self.request_kwargs.items() if k != "stream"}
+            
+    #         # 将结构化描述添加到系统消息中
+    #         has_system_message = False
+    #         for i, msg in enumerate(messages):
+    #             if msg.role == "system":
+    #                 has_system_message = True
+    #                 # 添加明确格式要求
+    #                 format_instructions = """
+    #                 请严格按照以下规则格式化您的响应：
+    #                 1. 所有字段必须是简单的字符串，不要使用嵌套对象
+    #                 2. 必须提供所有必需字段(name, storyline, ending)
+    #                 3. characters数组中的每一项必须是简单字符串
+    #                 4. 以纯文本格式返回，不要使用Markdown
+    #                 """
+    #                 messages[i].content = (msg.content or "") + format_instructions
+    #                 break
+            
+    #         if not has_system_message:
+    #             # 如果没有系统消息，添加一个
+    #             messages.insert(0, Message(role="system", content="您需要以JSON格式回复，且所有字段必须是简单字符串，不要使用嵌套对象。"))
+            
+    #         # 使用流式API获取完整响应
+    #         try:
+    #             full_response = ""
+    #             for chunk in self.get_client().chat.completions.create(
+    #                 model=self.id,
+    #                 messages=[self._format_message(m) for m in messages],
+    #                 stream=True,  # 只在这里设置流参数
+    #                 **kwargs
+    #             ):
+    #                 if chunk.choices and chunk.choices[0].delta.content:
+    #                     full_response += chunk.choices[0].delta.content
+                
+    #             # 从响应文本中提取JSON
+    #             json_text = self._extract_json(full_response)
+    #             json_data = json.loads(json_text)
+                
+    #             # 转换格式为标准格式
+    #             json_data = self._simplify_response(json_data)
+                
+    #             # 创建模拟的完整响应
+    #             return self._create_mock_completion(json_data, self.response_format)
+    #         except Exception as e:
+    #             raise ModelProviderError(f"解析结构化输出失败: {str(e)}", model_name=self.name, model_id=self.id)
+        
+    #     # 非结构化输出走标准流程
+    #     return super().invoke(messages)
+    
+    # def _extract_json(self, text: str) -> str:
+    #     """提取JSON文本，处理可能的非JSON前缀/后缀"""
+    #     # 寻找JSON边界
+    #     json_start = text.find("{")
+    #     json_end = text.rfind("}")
+        
+    #     if json_start == -1 or json_end == -1:
+    #         raise ValueError("无法找到有效的JSON对象")
+            
+    #     return text[json_start:json_end+1]
+    
+    # def _simplify_response(self, data: Dict) -> Dict:
+    #     """将复杂的嵌套JSON转换为简单格式"""
+    #     result = {}
+        
+    #     # 处理缺失的必填字段
+    #     if "title" in data and "name" not in data:
+    #         result["name"] = data["title"]
+        
+    #     if "storyline" not in data and "plot" in data:
+    #         result["storyline"] = data["plot"]
+            
+    #     if "ending" not in data:
+    #         result["ending"] = "结局待定"
+            
+    #     # 转换设置
+    #     if "setting" in data:
+    #         if isinstance(data["setting"], dict):
+    #             setting = data["setting"]
+    #             if "location" in setting:
+    #                 result["setting"] = f"{setting['location']}"
+    #                 if "description" in setting:
+    #                     result["setting"] += f": {setting['description']}"
+    #         else:
+    #             result["setting"] = data["setting"]
+                
+    #     # 转换类型
+    #     if "genre" in data:
+    #         if isinstance(data["genre"], dict):
+    #             genre = data["genre"]
+    #             result["genre"] = genre.get("primary", "")
+    #         else:
+    #             result["genre"] = data["genre"]
+                
+    #     # 处理角色
+    #     if "characters" in data:
+    #         characters = []
+    #         for char in data["characters"]:
+    #             if isinstance(char, dict):
+    #                 name = char.get("name", "")
+    #                 role = char.get("role", "")
+    #                 chars = f"{name}"
+    #                 if role:
+    #                     chars += f" ({role})"
+    #                 characters.append(chars)
+    #             else:
+    #                 characters.append(char)
+    #         result["characters"] = characters
+            
+    #     # 拷贝其他简单字段
+    #     for key, value in data.items():
+    #         if key not in result and isinstance(value, (str, int, float, bool)):
+    #             result[key] = value
+        
+    #     return result
+    
+    # def _create_mock_completion(self, data: Dict, model_class: Type[BaseModel]) -> ParsedChatCompletion:
+    #     """创建模拟的ParsedChatCompletion对象"""
+    #     # 创建Pydantic模型实例
+    #     try:
+    #         model_instance = model_class(**data)
+    #     except ValidationError as e:
+    #         raise ModelProviderError(f"创建结构化输出失败: {str(e)}", model_name=self.name, model_id=self.id)
+            
+    #     # 模拟ParsedChatCompletion的结构
+    #     completion = ParsedChatCompletion(
+    #         id=f"mock-{uuid.uuid4()}",
+    #         object="chat.completion",
+    #         created=int(time.time()),
+    #         model=self.id,
+    #         choices=[{
+    #             "index": 0,
+    #             "message": {
+    #                 "role": "assistant",
+    #                 "content": json.dumps(data),
+    #                 "function_call": None,
+    #                 "tool_calls": None,
+    #                 "parsed": model_instance
+    #             },
+    #             "finish_reason": "stop"
+    #         }],
+    #         usage={
+    #             "prompt_tokens": 0,
+    #             "completion_tokens": 0,
+    #             "total_tokens": 0
+    #         }
+    #     )
+        
+    #     return completion

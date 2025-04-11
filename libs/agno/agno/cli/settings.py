@@ -11,10 +11,15 @@ from agno.utils.log import logger
 
 AGNO_CLI_CONFIG_DIR: Path = Path.home().resolve().joinpath(".config").joinpath("ag")
 
+# add by xuy 20250411
+try:
+    app_version_default = metadata.version("agno")
+except Exception:
+    app_version_default = "0.0.0-dev"  # ¿ª·¢°æ±¾
 
 class AgnoCliSettings(BaseSettings):
     app_name: str = "agno"
-    app_version: str = metadata.version("agno")
+    app_version: str = app_version_default
 
     tmp_token_path: Path = AGNO_CLI_CONFIG_DIR.joinpath("tmp_token")
     config_file_path: Path = AGNO_CLI_CONFIG_DIR.joinpath("config.json")
