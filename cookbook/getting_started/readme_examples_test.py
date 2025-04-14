@@ -1,10 +1,17 @@
 """Readme Examples
 运行 `pip install openai duckduckgo-search yfinance lancedb tantivy pypdf agno` 来安装依赖项。"""
 
+import os
+import sys
+from pathlib import Path
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.models.openai import OpenAIChat, QWQChat, \
+    DeepSeekV3Chat, QwenMaxChat20250125, QwenV1MaxChat, QwenOmniTurboChat, Qwen2Dot5Omni7bChat
+
 from agno.agent import Agent
 from agno.embedder.openai import BaiLianEmbedder
 from agno.knowledge.pdf_url import PDFUrlKnowledgeBase
-from agno.models.openai import QWQChat
 from agno.team.team import Team
 from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.yfinance import YFinanceTools
@@ -47,7 +54,7 @@ level_2_agent = Agent(
             uri="tmp/lancedb",
             table_name="recipes",
             search_type=SearchType.hybrid,
-            embedder=BaiLianEmbedder(id="text-embedding-v3"),
+            embedder=BaiLianEmbedder(),
         ),
     ),
     tools=[DuckDuckGoTools()],

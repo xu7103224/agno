@@ -6,6 +6,9 @@ from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
 
+from agno.models.openai import OpenAIChat, QWQChat, \
+    DeepSeekV3Chat, QwenMaxChat20250125, QwenV1MaxChat, QwenOmniTurboChat, Qwen2Dot5Omni7bChat
+
 from agno.agent import Agent
 from agno.exceptions import RetryAgentRun
 from agno.tools import FunctionCall, tool
@@ -31,5 +34,8 @@ def print_something(something: str) -> Iterator[str]:
     yield f"我已经打印了 {something}"
 
 
-agent = Agent(tools=[print_something], markdown=True)
+agent = Agent(
+    model=QwenMaxChat20250125(),
+    tools=[print_something],
+    markdown=True)
 agent.print_response("打印一些有趣的东西", stream=True)

@@ -719,9 +719,211 @@ class OpenAIChat(Model):
 
         return model_response
 
+@dataclass
+class DashScopeCompatChat(OpenAIChat):
+    """通义千问系列模型的基类，处理兼容API的特殊要求"""
+    
+    def _get_client_params(self) -> Dict[str, Any]:
+            """确保使用子类设置的API密钥，不依赖环境变量"""
+            # 直接使用已设置的api_key，不检查环境变量
+            client_params = {
+                "api_key": self.api_key,
+                "base_url": self.base_url,
+            }
+            
+            # 添加其他非空参数
+            for param in ["organization", "timeout", "max_retries", "default_headers", "default_query"]:
+                if getattr(self, param) is not None:
+                    client_params[param] = getattr(self, param)
+                    
+            # 添加其他客户端参数
+            if self.client_params:
+                client_params.update(self.client_params)
+                
+            return client_params
+    
+    def invoke(self, messages: List[Message]) -> Union[ChatCompletion, ParsedChatCompletion]:
+        """强制通过流式API处理请求，因为通义千问模型只支持流式输出"""
+        try:
+            # 准备请求参数
+            kwargs = {k: v for k, v in self.request_kwargs.items() if k != "stream"}
+            
+            # 对于结构化输出的特殊处理
+            if self.response_format is not None and self.structured_outputs:
+                # 添加JSON关键词要求到消息中
+                messages = self._add_json_keyword_to_messages(messages)
+                
+                # 确保使用正确的response_format
+                if "response_format" in kwargs and isinstance(kwargs["response_format"], type):
+                    kwargs["response_format"] = {"type": "json_object"}
+            
+            # 使用流式API获取完整响应
+            full_response = ""
+            for chunk in self.get_client().chat.completions.create(
+                model=self.id,
+                messages=[self._format_message(m) for m in messages],
+                stream=True,  # 强制使用流式输出
+                **kwargs
+            ):
+                if chunk.choices and chunk.choices[0].delta.content:
+                    full_response += chunk.choices[0].delta.content
+            
+            # 处理结构化输出
+            if self.response_format is not None and self.structured_outputs:
+                return self._parse_structured_response(full_response)
+            
+            # 构建普通响应
+            return self._create_mock_completion(full_response)
+            
+        except Exception as e:
+            raise ModelProviderError(message=str(e), model_name=self.name, model_id=self.id) from e
+    
+    def _add_json_keyword_to_messages(self, messages: List[Message]) -> List[Message]:
+        """确保消息中包含'json'关键词，以满足通义千问结构化输出的要求"""
+        # 创建消息副本以避免修改原始消息
+        messages_copy = []
+        has_json_keyword = False
+        has_system_message = False
+        
+        for msg in messages:
+            msg_copy = Message(
+                role=msg.role,
+                content=msg.content,
+                name=msg.name,
+                tool_call_id=msg.tool_call_id,
+                tool_calls=msg.tool_calls
+            )
+            
+            if msg.role == "system":
+                has_system_message = True
+                # 检查是否已包含json关键词
+                if msg.content and "json" in msg.content.lower():
+                    has_json_keyword = True
+                else:
+                    # 添加json关键词
+                    msg_copy.content = (msg.content or "") + "\n请以JSON格式返回响应。"
+                    has_json_keyword = True
+            
+            messages_copy.append(msg_copy)
+        
+        # 如果没有系统消息，添加一个包含json关键词的系统消息
+        if not has_system_message:
+            messages_copy.insert(0, Message(role="system", content="请以JSON格式返回响应。"))
+            has_json_keyword = True
+        
+        # 如果仍然没有json关键词，将其添加到最后一条用户消息中
+        if not has_json_keyword:
+            for i in range(len(messages_copy) - 1, -1, -1):
+                if messages_copy[i].role == "user":
+                    messages_copy[i].content = (messages_copy[i].content or "") + "\n请以JSON格式返回。"
+                    break
+        
+        return messages_copy
+    
+    def _parse_structured_response(self, response_text: str) -> ParsedChatCompletion:
+        """从文本响应中解析结构化输出"""
+        import json
+        import re
+        import time
+        import uuid
+        
+        # 尝试提取JSON
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # 如果没有代码块，尝试直接解析整个响应
+            json_str = response_text
+        
+        # 清理并解析JSON
+        try:
+            json_data = json.loads(json_str)
+        except Exception:
+            # 尝试修复常见的JSON格式问题
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
+            json_data = json.loads(json_str)
+        
+        # 简化复杂响应
+        json_data = self._simplify_response(json_data)
+        
+        # 创建模型实例
+        model_instance = self.response_format(**json_data)
+        
+        # 构建模拟的ParsedChatCompletion
+        return ParsedChatCompletion(
+            id=f"mock-{uuid.uuid4()}",
+            created=int(time.time()),
+            model=self.id,
+            object="chat.completion",
+            choices=[{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(json_data),
+                    "parsed": model_instance
+                },
+                "finish_reason": "stop"
+            }],
+            usage={
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+        )
+    
+    def _simplify_response(self, data: Dict) -> Dict:
+        """将复杂的嵌套JSON转换为简单格式"""
+        # 现有实现或简化版本...
+        result = {}
+        
+        for key, value in data.items():
+            if isinstance(value, dict):
+                # 尝试从嵌套字典中提取有用信息
+                for subkey in ["value", "text", "name", "description", "primary"]:
+                    if subkey in value:
+                        result[key] = value[subkey]
+                        break
+                else:
+                    result[key] = str(value)
+            elif isinstance(value, list):
+                if all(isinstance(item, str) for item in value):
+                    result[key] = value
+                else:
+                    result[key] = [str(item) for item in value]
+            else:
+                result[key] = value
+                
+        return result
+    
+    def _create_mock_completion(self, content: str) -> ChatCompletion:
+        """创建模拟的非结构化ChatCompletion"""
+        import time
+        import uuid
+        
+        return ChatCompletion(
+            id=f"mock-{uuid.uuid4()}",
+            created=int(time.time()),
+            model=self.id,
+            object="chat.completion",
+            choices=[{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": content,
+                },
+                "finish_reason": "stop"
+            }],
+            usage={
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+        )
+
 # add by xuy 20250411
 @dataclass
-class QWQChat(OpenAIChat):
+class QWQChat(DashScopeCompatChat):
     """
     A pre-configured OpenAIChat class for using the QWQ-32B model through DashScope compatible API.
     
@@ -745,15 +947,140 @@ class QWQChat(OpenAIChat):
         # Set up pre-configured settings
         self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
-        # ������ɫӳ��
+        # 修正角色映射
         self.role_map = {
-            "system": "system",  # ��Ϊ��׼��ɫ
+            "system": "system",  # 改为标准角色
             "user": "user",
             "assistant": "assistant",
             "tool": "tool",
             "model": "assistant",
         }
         
+
+@dataclass
+class QwenMaxChat20250125(OpenAIChat):
+    """
+    A pre-configured OpenAIChat class for using the QwenMax model through DashScope compatible API.
+    """
+    
+    def __init__(
+        self,
+        id: str = "qwen-max-2025-01-25",
+        name: str = "QwenMaxChat20250125",
+        provider: str = "Alibaba DashScope",
+        **kwargs
+    ):
+        super().__init__(
+            id=id,
+            name=name,
+            provider=provider,
+            **kwargs
+        )
+        # Set up pre-configured settings
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
+        # 修正角色映射
+        self.role_map = {
+            "system": "system",  # 改为标准角色
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+            "model": "assistant",
+        }
+
+@dataclass
+class QwenV1MaxChat(OpenAIChat):
+    """
+    A pre-configured OpenAIChat class for using the QwenMax model through DashScope compatible API.
+    """
+    
+    def __init__(
+        self,
+        id: str = "qwen-vl-max",
+        name: str = "QwenV1MaxChat",
+        provider: str = "Alibaba DashScope",
+        **kwargs
+    ):
+        super().__init__(
+            id=id,
+            name=name,
+            provider=provider,
+            **kwargs
+        )
+        # Set up pre-configured settings
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
+        # 修正角色映射
+        self.role_map = {
+            "system": "system",  # 改为标准角色
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+            "model": "assistant",
+        }
+
+
+@dataclass
+class Qwen2Dot5Omni7bChat(OpenAIChat):
+    """
+    A mixed model for using the QwenOmniTurbo model through DashScope compatible API.
+    """
+    
+    def __init__(
+        self,
+        id: str = "qwen2.5-omni-7b",
+        name: str = "Qwen2Dot5Omni7bChat",
+        provider: str = "Alibaba DashScope",
+        **kwargs
+    ):
+        super().__init__(
+            id=id,
+            name=name,
+            provider=provider,
+            **kwargs
+        )
+        # Set up pre-configured settings
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
+        # 修正角色映射
+        self.role_map = {
+            "system": "system",  # 改为标准角色
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+            "model": "assistant",
+        }
+
+@dataclass
+class QwenOmniTurboChat(OpenAIChat):
+    """
+    A mixed model for using the QwenOmniTurbo model through DashScope compatible API.
+    """
+    
+    def __init__(
+        self,
+        id: str = "qwen-omni-turbo",
+        name: str = "QwenOmniTurboChat",
+        provider: str = "Alibaba DashScope",
+        **kwargs
+    ):
+        super().__init__(
+            id=id,
+            name=name,
+            provider=provider,
+            **kwargs
+        )
+        # Set up pre-configured settings
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
+        # 修正角色映射
+        self.role_map = {
+            "system": "system",  # 改为标准角色
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+            "model": "assistant",
+        }
 
 import json
 import time
@@ -787,9 +1114,9 @@ class DeepSeekV3Chat(OpenAIChat):
         # Set up pre-configured settings
         self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         self.api_key = 'sk-df66e1c0892143e7a610c5c20db08d0e'
-        # ������ɫӳ��
+        # 修正角色映射
         self.role_map = {
-            "system": "system",  # ��Ϊ��׼��ɫ
+            "system": "system",  # 改为标准角色
             "user": "user",
             "assistant": "assistant",
             "tool": "tool",
@@ -797,74 +1124,74 @@ class DeepSeekV3Chat(OpenAIChat):
         }
 
     # def invoke(self, messages: List[Message]) -> Union[ChatCompletion, ParsedChatCompletion]:
-    #     # �����Ҫ�ṹ�������ע����ȷ��JSON��ʽָ��
+    #     # 如果需要结构化输出，注入明确的JSON格式指导
     #     if self.response_format is not None and self.structured_outputs:
-    #         # ����ԭ����������Ƴ����ܵ� stream ����
+    #         # 备份原请求参数并移除可能的 stream 参数
     #         kwargs = {k: v for k, v in self.request_kwargs.items() if k != "stream"}
             
-    #         # ���ṹ���������ӵ�ϵͳ��Ϣ��
+    #         # 将结构化描述添加到系统消息中
     #         has_system_message = False
     #         for i, msg in enumerate(messages):
     #             if msg.role == "system":
     #                 has_system_message = True
-    #                 # ������ȷ��ʽҪ��
+    #                 # 添加明确格式要求
     #                 format_instructions = """
-    #                 ���ϸ������¹����ʽ��������Ӧ��
-    #                 1. �����ֶα����Ǽ򵥵��ַ�������Ҫʹ��Ƕ�׶���
-    #                 2. �����ṩ���б����ֶ�(name, storyline, ending)
-    #                 3. characters�����е�ÿһ������Ǽ��ַ���
-    #                 4. �Դ��ı���ʽ���أ���Ҫʹ��Markdown
+    #                 请严格按照以下规则格式化您的响应：
+    #                 1. 所有字段必须是简单的字符串，不要使用嵌套对象
+    #                 2. 必须提供所有必需字段(name, storyline, ending)
+    #                 3. characters数组中的每一项必须是简单字符串
+    #                 4. 以纯文本格式返回，不要使用Markdown
     #                 """
     #                 messages[i].content = (msg.content or "") + format_instructions
     #                 break
             
     #         if not has_system_message:
-    #             # ���û��ϵͳ��Ϣ������һ��
-    #             messages.insert(0, Message(role="system", content="����Ҫ��JSON��ʽ�ظ����������ֶα����Ǽ��ַ�������Ҫʹ��Ƕ�׶���"))
+    #             # 如果没有系统消息，添加一个
+    #             messages.insert(0, Message(role="system", content="您需要以JSON格式回复，且所有字段必须是简单字符串，不要使用嵌套对象。"))
             
-    #         # ʹ����ʽAPI��ȡ������Ӧ
+    #         # 使用流式API获取完整响应
     #         try:
     #             full_response = ""
     #             for chunk in self.get_client().chat.completions.create(
     #                 model=self.id,
     #                 messages=[self._format_message(m) for m in messages],
-    #                 stream=True,  # ֻ����������������
+    #                 stream=True,  # 只在这里设置流参数
     #                 **kwargs
     #             ):
     #                 if chunk.choices and chunk.choices[0].delta.content:
     #                     full_response += chunk.choices[0].delta.content
                 
-    #             # ����Ӧ�ı�����ȡJSON
+    #             # 从响应文本中提取JSON
     #             json_text = self._extract_json(full_response)
     #             json_data = json.loads(json_text)
                 
-    #             # ת����ʽΪ��׼��ʽ
+    #             # 转换格式为标准格式
     #             json_data = self._simplify_response(json_data)
                 
-    #             # ����ģ���������Ӧ
+    #             # 创建模拟的完整响应
     #             return self._create_mock_completion(json_data, self.response_format)
     #         except Exception as e:
-    #             raise ModelProviderError(f"�����ṹ�����ʧ��: {str(e)}", model_name=self.name, model_id=self.id)
+    #             raise ModelProviderError(f"解析结构化输出失败: {str(e)}", model_name=self.name, model_id=self.id)
         
-    #     # �ǽṹ������߱�׼����
+    #     # 非结构化输出走标准流程
     #     return super().invoke(messages)
     
     # def _extract_json(self, text: str) -> str:
-    #     """��ȡJSON�ı����������ܵķ�JSONǰ׺/��׺"""
-    #     # Ѱ��JSON�߽�
+    #     """提取JSON文本，处理可能的非JSON前缀/后缀"""
+    #     # 寻找JSON边界
     #     json_start = text.find("{")
     #     json_end = text.rfind("}")
         
     #     if json_start == -1 or json_end == -1:
-    #         raise ValueError("�޷��ҵ���Ч��JSON����")
+    #         raise ValueError("无法找到有效的JSON对象")
             
     #     return text[json_start:json_end+1]
     
     # def _simplify_response(self, data: Dict) -> Dict:
-    #     """�����ӵ�Ƕ��JSONת��Ϊ�򵥸�ʽ"""
+    #     """将复杂的嵌套JSON转换为简单格式"""
     #     result = {}
         
-    #     # ����ȱʧ�ı����ֶ�
+    #     # 处理缺失的必填字段
     #     if "title" in data and "name" not in data:
     #         result["name"] = data["title"]
         
@@ -872,9 +1199,9 @@ class DeepSeekV3Chat(OpenAIChat):
     #         result["storyline"] = data["plot"]
             
     #     if "ending" not in data:
-    #         result["ending"] = "��ִ���"
+    #         result["ending"] = "结局待定"
             
-    #     # ת������
+    #     # 转换设置
     #     if "setting" in data:
     #         if isinstance(data["setting"], dict):
     #             setting = data["setting"]
@@ -885,7 +1212,7 @@ class DeepSeekV3Chat(OpenAIChat):
     #         else:
     #             result["setting"] = data["setting"]
                 
-    #     # ת������
+    #     # 转换类型
     #     if "genre" in data:
     #         if isinstance(data["genre"], dict):
     #             genre = data["genre"]
@@ -893,7 +1220,7 @@ class DeepSeekV3Chat(OpenAIChat):
     #         else:
     #             result["genre"] = data["genre"]
                 
-    #     # ������ɫ
+    #     # 处理角色
     #     if "characters" in data:
     #         characters = []
     #         for char in data["characters"]:
@@ -908,7 +1235,7 @@ class DeepSeekV3Chat(OpenAIChat):
     #                 characters.append(char)
     #         result["characters"] = characters
             
-    #     # �����������ֶ�
+    #     # 拷贝其他简单字段
     #     for key, value in data.items():
     #         if key not in result and isinstance(value, (str, int, float, bool)):
     #             result[key] = value
@@ -916,14 +1243,14 @@ class DeepSeekV3Chat(OpenAIChat):
     #     return result
     
     # def _create_mock_completion(self, data: Dict, model_class: Type[BaseModel]) -> ParsedChatCompletion:
-    #     """����ģ���ParsedChatCompletion����"""
-    #     # ����Pydanticģ��ʵ��
+    #     """创建模拟的ParsedChatCompletion对象"""
+    #     # 创建Pydantic模型实例
     #     try:
     #         model_instance = model_class(**data)
     #     except ValidationError as e:
-    #         raise ModelProviderError(f"�����ṹ�����ʧ��: {str(e)}", model_name=self.name, model_id=self.id)
+    #         raise ModelProviderError(f"创建结构化输出失败: {str(e)}", model_name=self.name, model_id=self.id)
             
-    #     # ģ��ParsedChatCompletion�Ľṹ
+    #     # 模拟ParsedChatCompletion的结构
     #     completion = ParsedChatCompletion(
     #         id=f"mock-{uuid.uuid4()}",
     #         object="chat.completion",

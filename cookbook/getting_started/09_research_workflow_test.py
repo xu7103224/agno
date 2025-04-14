@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
 
 from agno.agent import Agent
-from agno.models.openai import QWQChat
+from agno.models.openai import QwenMaxChat20250125
 from agno.storage.sqlite import SqliteStorage
 from agno.tools.duckduckgo import DuckDuckGoTools
 from agno.tools.newspaper4k import Newspaper4kTools
@@ -73,7 +73,7 @@ class ResearchReportGenerator(Workflow):
     """)
 
     web_searcher: Agent = Agent(
-        model=QWQChat(),
+        model=QwenMaxChat20250125(),
         tools=[DuckDuckGoTools()],
         description=dedent("""\
         您是ResearchBot-X，发现和评估学术和科学来源的专家。\
@@ -89,10 +89,12 @@ class ResearchReportGenerator(Workflow):
         避免观点文章和非权威来源。\
         """),
         response_model=SearchResults,
+        stream=True,
+        use_json_mode=True,
     )
 
     article_scraper: Agent = Agent(
-        model=QWQChat(),
+        model=QwenMaxChat20250125(),
         tools=[Newspaper4kTools()],
         description=dedent("""\
         您是ContentBot-X，提取和构建学术内容的专家。\
@@ -109,10 +111,12 @@ class ResearchReportGenerator(Workflow):
         以清晰的markdown格式呈现一切，以获得最佳可读性。\
         """),
         response_model=ScrapedArticle,
+        stream=True,
+        use_json_mode=True,
     )
 
     writer: Agent = Agent(
-        model=QWQChat(),
+        model=QwenMaxChat20250125(),
         description=dedent("""\
         您是Professor X-2000，一位杰出的AI研究科学家，结合学术严谨性和引人入胜的叙事风格。\
         """),
@@ -177,6 +181,8 @@ class ResearchReportGenerator(Workflow):
         日期：{current_date}\
         """),
         markdown=True,
+        stream=True,
+        use_json_mode=True,
     )
 
     def run(

@@ -125,6 +125,7 @@ structured_output_agent = Agent(
         请以JSON格式输出。\
     """),
     response_model=MovieScript,
+    use_json_mode=True,
 )
 
 # 使用不同地点的示例用法

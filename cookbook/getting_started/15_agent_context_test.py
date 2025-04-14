@@ -9,15 +9,14 @@
 import json
 from textwrap import dedent
 
-import httpx
-from agno.agent import Agent
-from agno.models.openai import QWQChat
-
 import os
 import sys
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+import httpx
+from agno.agent import Agent
+from agno.models.openai import QWQChat
 
 
 def get_top_hackernews_stories(num_stories: int = 5) -> str:

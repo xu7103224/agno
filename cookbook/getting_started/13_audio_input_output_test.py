@@ -15,16 +15,16 @@
 from textwrap import dedent
 
 import requests
-from agno.agent import Agent
-from agno.media import Audio
-from agno.models.openai import OpenAIChat
-from agno.utils.audio import write_audio_to_file
-
 import os
 import sys
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.agent import Agent
+from agno.media import Audio
+from agno.models.openai import OpenAIChat
+from agno.utils.audio import write_audio_to_file
+
 
 # 创建AI语音交互代理
 agent = Agent(

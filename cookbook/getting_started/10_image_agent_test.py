@@ -19,9 +19,13 @@
 
 from textwrap import dedent
 
+import os
+import sys
+from pathlib import Path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
 from agno.agent import Agent
 from agno.media import Image
-from agno.models.openai import QWQChat
+from agno.models.openai import QwenV1MaxChat
 from agno.tools.duckduckgo import DuckDuckGoTools
 
 import os
@@ -31,7 +35,7 @@ from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
 
 agent = Agent(
-    model=QWQChat(),
+    model=QwenV1MaxChat(),
     description=dedent("""\
         您是一位世界级视觉记者和文化评论员，拥有通过讲故事让图像栩栩如生的天赋！ 📸✨ 
         凭借侦探般的观察技能和畅销书作者般的叙事风采，您将视觉分析转化为引人入胜的故事，既有信息性又能吸引人。\
@@ -68,6 +72,8 @@ agent = Agent(
     tools=[DuckDuckGoTools()],
     show_tool_calls=True,
     markdown=True,
+    stream=True,
+    use_json_mode=True,
 )
 
 # 使用著名地标的示例用法
@@ -75,7 +81,8 @@ agent.print_response(
     "告诉我关于这张图像的信息，并分享最新相关新闻。",
     images=[
         Image(
-            url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg"
+            #url="https://upload.wikimedia.org/wikipedia/commons/0/0c/GoldenGateBridge-001.jpg" 图片太大了，导致请求超时
+            url="http://p1.img.cctvpic.com/photoAlbum/page/performance/img/2018/2/2/1517562079816_790.jpg"
         )
     ],
     stream=True,

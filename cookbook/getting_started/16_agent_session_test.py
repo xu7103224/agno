@@ -15,15 +15,15 @@ import json
 from typing import Optional
 
 import typer
-from agno.agent import Agent
-from agno.models.openai import QWQChat
-from agno.storage.sqlite import SqliteStorage
 
 import os
 import sys
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.agent import Agent
+from agno.models.openai import QWQChat
+from agno.storage.sqlite import SqliteStorage
 
 from rich import print
 from rich.console import Console

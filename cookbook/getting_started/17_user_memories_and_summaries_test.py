@@ -34,13 +34,19 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 import typer
 from agno.agent import Agent, AgentMemory
 from agno.memory.db.sqlite import SqliteMemoryDb
-from agno.models.openai import QWQChat
+from agno.models.openai import OpenAIChat, QWQChat, \
+    DeepSeekV3Chat, QwenMaxChat20250125, QwenV1MaxChat, QwenOmniTurboChat, Qwen2Dot5Omni7bChat
 from agno.storage.sqlite import SqliteStorage
+from agno.memory.manager import MemoryManager
+from agno.memory.classifier import MemoryClassifier
+from agno.memory.summarizer import MemorySummarizer
 from rich.console import Console
 from rich.json import JSON
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+
+os.environ["OPENAI_API_KEY"] = "sk-df66e1c0892143e7a610c5c20db08d0e"
 
 def create_agent(user: str = "user"):
     session_id: Optional[str] = None
@@ -57,11 +63,14 @@ def create_agent(user: str = "user"):
             session_id = existing_sessions[0]
 
     agent = Agent(
-        model=QWQChat(),
+        model=QwenMaxChat20250125(),
         user_id=user,
         session_id=session_id,
         # 使用SQLite存储配置记忆系统
         memory=AgentMemory(
+            manager=MemoryManager(model=QwenMaxChat20250125()),
+            classifier=MemoryClassifier(model=QwenMaxChat20250125()),
+            summarizer=MemorySummarizer(model=QwenMaxChat20250125()),
             db=SqliteMemoryDb(
                 table_name="agent_memory",
                 db_file="tmp/agent_memory.db",
@@ -81,6 +90,7 @@ def create_agent(user: str = "user"):
         - 保持温暖、积极的语调，同时保持精确和乐于助人
         - 在适当时，引用先前的对话和记忆
         - 对于您记得或不记得的内容始终保持诚实"""),
+        markdown=True,
     )
 
     if session_id is None:

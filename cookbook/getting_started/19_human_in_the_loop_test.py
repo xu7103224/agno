@@ -20,6 +20,12 @@ from textwrap import dedent
 from typing import Iterator
 
 import httpx
+import os
+import sys
+from pathlib import Path
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.models.openai import QWQChat
 from agno.agent import Agent
 from agno.exceptions import StopAgentRun
 from agno.tools import FunctionCall, tool
@@ -83,8 +89,10 @@ def get_top_hackernews_stories(num_stories: int) -> Iterator[str]:
         yield json.dumps(story)
 
 
+
 # 使用技术达人个性和清晰指令初始化代理
 agent = Agent(
+    model=QWQChat(),
     description="一个获取并总结Hacker News文章的技术新闻助手",
     instructions=dedent("""\
         你是一个热情洋溢的技术报道员

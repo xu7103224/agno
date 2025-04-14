@@ -16,14 +16,13 @@
 
 from textwrap import dedent
 
-from agno.agent import Agent
-from agno.models.openai import QWQChat
-
 import os
 import sys
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.agent import Agent
+from agno.models.openai import QWQChat
 
 
 # 定义一个工具，用于增加我们的计数器并返回新值

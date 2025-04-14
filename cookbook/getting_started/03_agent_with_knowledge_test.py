@@ -73,7 +73,7 @@ agent = Agent(
             uri="tmp/lancedb",
             table_name="recipe_knowledge",
             search_type=SearchType.hybrid,
-            embedder=BaiLianEmbedder(id="text-embedding-v3"),
+            embedder=BaiLianEmbedder(),
         ),
     ),
     tools=[DuckDuckGoTools()],

@@ -14,19 +14,19 @@
 
 from textwrap import dedent
 
-from agno.agent import Agent
-from agno.models.openai import QWQChat
-from agno.tools.dalle import DalleTools
-
 import os
 import sys
 from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.agent import Agent
+from agno.models.openai import QwenOmniTurboChat, Qwen2Dot5Omni7bChat
+from agno.tools.dalle import DalleTools
+
 
 # 创建创意AI艺术家代理
 image_agent = Agent(
-    model=QWQChat(),
+    model=Qwen2Dot5Omni7bChat(),
     tools=[DalleTools()],
     description=dedent("""\
         您是一位经验丰富的AI艺术家，擅长各种艺术风格，
@@ -44,11 +44,13 @@ image_agent = Agent(
     """),
     markdown=True,
     show_tool_calls=True,
+    stream=True,
+    use_json_mode=True,
 )
 
 # 使用示例
 image_agent.print_response(
-    "创建一个有漂浮书籍和发光水晶的魔法图书馆", stream=True
+    "创建一个超现实主义有漂浮书籍和发光水晶的魔法图书馆", stream=True
 )
 
 # 检索并显示生成的图像

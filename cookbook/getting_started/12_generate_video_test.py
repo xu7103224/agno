@@ -15,19 +15,19 @@
 
 from textwrap import dedent
 
-from agno.agent import Agent
-from agno.models.openai import QWQChat
-from agno.tools.models_labs import ModelsLabTools
 
 import os
 import sys
 from pathlib import Path
-
+os.environ["MODELS_LAB_API_KEY"] = "sk-df66e1c0892143e7a610c5c20db08d0e"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'libs', 'agno')))
+from agno.agent import Agent
+from agno.models.openai import QwenOmniTurboChat
+from agno.tools.models_labs import ModelsLabTools
 
 # 创建创意AI视频导演代理
 video_agent = Agent(
-    model=QWQChat(),
+    model=QwenOmniTurboChat(),
     tools=[ModelsLabTools()],
     description=dedent("""\
         您是一位经验丰富的AI视频导演，擅长各种视频风格，
@@ -40,6 +40,8 @@ video_agent = Agent(
         3. 使用具有详细、精心制作的提示的`generate_media`工具
         4. 提供简短的解释，说明所做的创意选择
         5. 如果请求不清晰，询问关于风格偏好的澄清
+        6. 视频长度控制到5至10秒
+        7. 可以没有音乐或音效
 
         视频将在UI中自动显示在您的回复下方。
         始终旨在创建引人入胜且有意义的视频，使用户的愿景变为现实！\
